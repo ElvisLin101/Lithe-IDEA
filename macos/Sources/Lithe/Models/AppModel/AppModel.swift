@@ -142,12 +142,7 @@ final class AppModel: ObservableObject, Identifiable {
     var activeDebugTerminalSessionID: UUID?
     var debugTerminalSessionIDsByDebugSession: [DebugSessionID: Set<UUID>] = [:]
     var activeDebugTerminalSessionIDsByDebugSession: [DebugSessionID: UUID] = [:]
-    private struct CachedModuleCapability {
-        let moduleID: ModuleID
-        let value: AnyObject
-    }
-    private var moduleCapabilities: [ModuleCapabilityID: CachedModuleCapability] = [:]
-    private var moduleFeatureObservations: [ModuleID: [AnyCancellable]] = [:]
+    let moduleCapabilityStore: ModuleCapabilityStore
     var languageCapability: LitheLanguageIntelligenceModule.LanguageIntelligenceCapability? {
         cachedModuleCapability(.languageIntelligence)
     }
@@ -265,7 +260,7 @@ final class AppModel: ObservableObject, Identifiable {
         _ id: ModuleCapabilityID,
         as type: Capability.Type = Capability.self
     ) -> Capability? {
-        moduleCapabilities[id]?.value as? Capability
+        moduleCapabilityStore.capability(id, as: type)
     }
 
     func cacheModuleCapability(
@@ -273,12 +268,11 @@ final class AppModel: ObservableObject, Identifiable {
         id: ModuleCapabilityID,
         moduleID: ModuleID
     ) {
-        moduleCapabilities[id] = CachedModuleCapability(moduleID: moduleID, value: capability)
+        moduleCapabilityStore.cache(capability, id: id, moduleID: moduleID)
     }
 
     func clearModuleBindings(for moduleID: ModuleID) {
-        moduleFeatureObservations[moduleID] = nil
-        moduleCapabilities = moduleCapabilities.filter { $0.value.moduleID != moduleID }
+        moduleCapabilityStore.clear(for: moduleID)
         for ownership in services.pluginCatalog.languageSupports.values {
             let support = ownership.declaration
             if support.languageServerModuleID == moduleID {
@@ -299,7 +293,7 @@ final class AppModel: ObservableObject, Identifiable {
         _ moduleID: ModuleID,
         observation: AnyCancellable
     ) {
-        moduleFeatureObservations[moduleID, default: []].append(observation)
+        moduleCapabilityStore.observe(moduleID, observation: observation)
     }
 
     func scheduleObjectWillChangeRelay() {
@@ -320,6 +314,7 @@ final class AppModel: ObservableObject, Identifiable {
         platformUI = services.platformUI
         keyboardShortcutFeature = KeyboardShortcutFeatureModel(settings: settings)
         notificationFeature = WorkbenchNotificationFeatureModel()
+        moduleCapabilityStore = ModuleCapabilityStore()
         workbenchBackgroundFeature = WorkbenchBackgroundFeatureModel(settings: settings, platform: services.workbenchBackgroundPlatform)
         discourseCommunityFeature = DiscourseCommunityFeatureModel(service: services.discourseCommunityService)
         terminalPlacementFeature = TerminalPlacementFeatureModel()
