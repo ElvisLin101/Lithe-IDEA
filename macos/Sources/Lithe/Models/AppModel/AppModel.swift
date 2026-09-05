@@ -75,12 +75,6 @@ final class AppModel: ObservableObject, Identifiable {
     var isPerformingProjectItemOperation: Bool {
         workspaceFeature.isPerformingProjectItemOperation
     }
-    @Published var activeNotifications: [WorkbenchNotification] = []
-    @Published var notifications: [WorkbenchNotification] = []
-    var notificationDismissalTasks: [UUID: Task<Void, Never>] = [:]
-    var notificationDismissalDeadlines: [UUID: ContinuousClock.Instant] = [:]
-    var notificationRemainingDurations: [UUID: Duration] = [:]
-    var areNotificationsHovered = false
     @Published var detectedAIConfigurations: [AIConfigurationSnapshot] = []
     @Published var commitMessage = ""
     @Published var amendCommit = false
@@ -120,6 +114,7 @@ final class AppModel: ObservableObject, Identifiable {
     private var moduleRuntimeShutdownTask: Task<Void, Never>?
     private var shortcutSettingsObservation: AnyCancellable?
     private var shortcutRecordingObservation: AnyCancellable?
+    private var notificationFeatureObservation: AnyCancellable?
     private var workbenchBackgroundFeatureObservation: AnyCancellable?
     private var isProjectSessionActive = true
     private var fileVisibilityRulesObserverID: UUID?
@@ -131,6 +126,7 @@ final class AppModel: ObservableObject, Identifiable {
     let platformUI: any PlatformUI
     let settings: AppSettings
     let keyboardShortcutFeature: KeyboardShortcutFeatureModel
+    let notificationFeature: WorkbenchNotificationFeatureModel
     let workbenchBackgroundFeature: WorkbenchBackgroundFeatureModel
     let runtimeFeature: RuntimeSettingsFeatureModel
     let languageToolingFeature: LanguageToolingFeatureModel
@@ -323,6 +319,7 @@ final class AppModel: ObservableObject, Identifiable {
         self.services = services
         platformUI = services.platformUI
         keyboardShortcutFeature = KeyboardShortcutFeatureModel(settings: settings)
+        notificationFeature = WorkbenchNotificationFeatureModel()
         workbenchBackgroundFeature = WorkbenchBackgroundFeatureModel(settings: settings, platform: services.workbenchBackgroundPlatform)
         discourseCommunityFeature = DiscourseCommunityFeatureModel(service: services.discourseCommunityService)
         terminalPlacementFeature = TerminalPlacementFeatureModel()
@@ -633,6 +630,8 @@ final class AppModel: ObservableObject, Identifiable {
             .sink { [weak self] commandID in
                 self?.shortcutDetector?.setSuspended(commandID != nil)
             }
+        notificationFeatureObservation = notificationFeature.objectWillChange
+            .sink { [weak self] _ in self?.scheduleObjectWillChangeRelay() }
         configureMediaViewerRegistry()
         shortcutDetector?.start()
     }
