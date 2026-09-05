@@ -100,7 +100,9 @@ final class AppModel: ObservableObject, Identifiable {
         set { editorChrome.update(caret: newValue) }
     }
     @Published var editorNavigationTarget: EditorNavigationTarget?
-    let navigationHistoryFeature: NavigationHistoryFeatureModel
+    var navigationHistoryFeature: NavigationHistoryFeatureModel {
+        featureGraph.navigationHistory
+    }
     var virtualDocumentProviderIDs: [URL: String] = [:]
     var javaCodeVisionHints: [URL: [JavaCodeVisionHint]] {
         javaFeature.javaCodeVisionHints
@@ -125,19 +127,24 @@ final class AppModel: ObservableObject, Identifiable {
     let services: AppServices
     let platformUI: any PlatformUI
     let settings: AppSettings
-    let keyboardShortcutFeature: KeyboardShortcutFeatureModel
-    let notificationFeature: WorkbenchNotificationFeatureModel
-    let workbenchBackgroundFeature: WorkbenchBackgroundFeatureModel
-    let runtimeFeature: RuntimeSettingsFeatureModel
-    let languageToolingFeature: LanguageToolingFeatureModel
+    let featureGraph: AppModelFeatureGraph
+    var keyboardShortcutFeature: KeyboardShortcutFeatureModel { featureGraph.keyboardShortcut }
+    var notificationFeature: WorkbenchNotificationFeatureModel { featureGraph.notification }
+    var workbenchBackgroundFeature: WorkbenchBackgroundFeatureModel { featureGraph.workbenchBackground }
+    var runtimeFeature: RuntimeSettingsFeatureModel { featureGraph.runtime }
+    var languageToolingFeature: LanguageToolingFeatureModel { featureGraph.languageTooling }
     let debugLaunchConfigurationResolver: DebugLaunchConfigurationResolver
     let debugPortAvailabilityChecker: any DebugPortAvailabilityChecking
-    let workspaceFeature: WorkspaceFeatureModel
-    let githubFeature: GitHubFeatureModel
-    let discourseCommunityFeature: DiscourseCommunityFeatureModel
-    let editorTabOrderFeature = EditorTabOrderFeatureModel()
-    let mediaFeature = MediaDocumentFeatureModel()
-    let terminalPlacementFeature: TerminalPlacementFeatureModel
+    var workspaceFeature: WorkspaceFeatureModel { featureGraph.workspace }
+    var githubFeature: GitHubFeatureModel { featureGraph.github }
+    var discourseCommunityFeature: DiscourseCommunityFeatureModel {
+        featureGraph.discourseCommunity
+    }
+    var editorTabOrderFeature: EditorTabOrderFeatureModel { featureGraph.editorTabOrder }
+    var mediaFeature: MediaDocumentFeatureModel { featureGraph.media }
+    var terminalPlacementFeature: TerminalPlacementFeatureModel {
+        featureGraph.terminalPlacement
+    }
     var debugTerminalSessionIDs: Set<UUID> = []
     var activeDebugTerminalSessionID: UUID?
     var debugTerminalSessionIDsByDebugSession: [DebugSessionID: Set<UUID>] = [:]
@@ -161,9 +168,9 @@ final class AppModel: ObservableObject, Identifiable {
     var gitCapability: LitheGitModule.GitModuleCapability? {
         cachedModuleCapability(.gitWorkspace)
     }
-    let documentFeature: DocumentFeatureModel
-    let javaFeature: JavaFeatureModel
-    let springFeature: SpringFeatureModel
+    var documentFeature: DocumentFeatureModel { featureGraph.document }
+    var javaFeature: JavaFeatureModel { featureGraph.java }
+    var springFeature: SpringFeatureModel { featureGraph.spring }
     private var activeDatabaseFeature: DatabaseFeatureModel? {
         let capability: LitheDatabaseModule.DatabaseModuleCapability? = cachedModuleCapability(.databaseWorkspace)
         return capability?.feature
@@ -312,44 +319,16 @@ final class AppModel: ObservableObject, Identifiable {
         self.settings = settings
         self.services = services
         platformUI = services.platformUI
-        keyboardShortcutFeature = KeyboardShortcutFeatureModel(settings: settings)
-        notificationFeature = WorkbenchNotificationFeatureModel()
+        let graph = AppModelFeatureGraph(settings: settings, services: services)
+        featureGraph = graph
         moduleCapabilityStore = ModuleCapabilityStore()
-        workbenchBackgroundFeature = WorkbenchBackgroundFeatureModel(settings: settings, platform: services.workbenchBackgroundPlatform)
-        discourseCommunityFeature = DiscourseCommunityFeatureModel(service: services.discourseCommunityService)
-        terminalPlacementFeature = TerminalPlacementFeatureModel()
-        workspaceFeature = WorkspaceFeatureModel(
-            operations: services.workspaceOperations,
-            fileOperations: services.fileOperations,
-            gitWatchContextProvider: services.gitWatchContextProvider,
-            directoryWatcherFactory: services.directoryWatcherFactory,
-            workspaceSessionStore: services.workspaceSessionStore,
-            directoryMarkStore: services.directoryMarkStore
-        )
-        githubFeature = GitHubFeatureModel(service: services.githubService)
-        Task { @MainActor [workspaceFeature, moduleRuntime = services.moduleRuntime] in
+        Task { @MainActor [workspaceFeature = graph.workspace, moduleRuntime = services.moduleRuntime] in
             guard let capability = try? await moduleRuntime.activateCapability(.workspaceFoundation),
                   let capability = capability as? LitheWorkspaceModule.WorkspaceFoundationCapability else { return }
             capability.attach(workspaceProjection: workspaceFeature)
         }
-        runtimeFeature = RuntimeSettingsFeatureModel(service: services.projectRuntimeService)
-        languageToolingFeature = LanguageToolingFeatureModel(
-            catalogSource: services.languageProviderCatalogSource,
-            catalogSnapshot: services.languageProviderCatalogSnapshot,
-            sessionsProvider: { nil }
-        )
         debugLaunchConfigurationResolver = services.debugLaunchConfigurationResolver
         debugPortAvailabilityChecker = services.debugPortAvailabilityChecker
-        documentFeature = DocumentFeatureModel(
-            operations: services.workspaceOperations,
-            documentLifecycleDecider: services.documentLifecycleDecider,
-            fileOperations: services.fileOperations,
-            fileStorage: services.fileStorage,
-            binaryFileViewerRegistry: services.binaryFileViewerRegistry
-        )
-        navigationHistoryFeature = NavigationHistoryFeatureModel()
-        javaFeature = JavaFeatureModel(operations: services.javaMavenOperations)
-        springFeature = SpringFeatureModel(operations: services.javaMavenOperations)
         recentProjects = services.recentProjectsStore.load()
         languageToolingFeature.configureSessions { [weak self] in
             self?.languageToolingSessionsIfActive
