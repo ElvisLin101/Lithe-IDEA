@@ -48,8 +48,10 @@ report_disk_image_state() {
     print -u2 -- "--- dmg diagnostics ($stage): attached disk images ---"
     /usr/bin/hdiutil info >&2 || true
     print -u2 -- "--- dmg diagnostics ($stage): openers of the staging tree ---"
-    # lsof exits non-zero when nothing matches, which is the healthy case.
-    /usr/sbin/lsof +D "$STAGING_DIR" >&2 || true
+    # Use a non-recursive directory lookup: recursive `+D` can take minutes on
+    # a large app bundle and would make the diagnostic path look like a hung
+    # package build. lsof still reports processes holding the staging root.
+    /usr/sbin/lsof +d "$STAGING_DIR" >&2 || true
     print -u2 -- "--- dmg diagnostics ($stage): mounted volumes ---"
     /bin/ls -1 /Volumes >&2 || true
     print -u2 -- "--- dmg diagnostics ($stage): end ---"
