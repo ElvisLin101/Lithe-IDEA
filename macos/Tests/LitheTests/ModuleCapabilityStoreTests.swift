@@ -29,6 +29,34 @@ struct ModuleCapabilityStoreTests {
         #expect(store.capability(.gitWorkspace, as: TestCapability.self) == nil)
         #expect(store.capability(.searchWorkspace) === searchCapability)
     }
+
+    @Test
+    func activationCachesAndTypeChecksTheReturnedCapability() async throws {
+        let store = ModuleCapabilityStore()
+        let capability = TestCapability()
+        var activationCount = 0
+
+        let first: TestCapability = try await store.activate(
+            .gitWorkspace,
+            moduleID: .git,
+            using: { _ in
+                activationCount += 1
+                return capability
+            }
+        )
+        let second: TestCapability = try await store.activate(
+            .gitWorkspace,
+            moduleID: .git,
+            using: { _ in
+                activationCount += 1
+                return TestCapability()
+            }
+        )
+
+        #expect(first === capability)
+        #expect(second === capability)
+        #expect(activationCount == 1)
+    }
 }
 
 private final class TestCapability {}
